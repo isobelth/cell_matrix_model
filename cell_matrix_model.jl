@@ -56,22 +56,25 @@ function deform_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{F
     d::Float64=m_cell[parameter_dict["current_deformation"]]
     R::Float64=m_cell[parameter_dict["current_radius"]]
     x::Float64=d/(2*R)
-    max_area::Float64 = pi * maintained_parameters[maintained_parameters_dict["R_max"]] * maintained_parameters[maintained_parameters_dict["R_max"]]
+    max_area::Float64 = round(pi * maintained_parameters[maintained_parameters_dict["R_max"]] * maintained_parameters[maintained_parameters_dict["R_max"]], digits=4)
     if x<=1
         new_area::Float64 = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=3)
     else
         new_area::Inf16
     end
     while (abs(new_area-max_area))>0.5
-        if new_area - max_area >0.1
-            R-=0.01
-            new_area = 2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d))
+        if new_area - max_area >0.5
+            R-=0.001
+
+            new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=4)
+            print("decrease radius, r=", R," new area=", new_area, "max area=", max_area, "\n")
         else
-            R+=0.01
-            new_area = 2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d))
+            R+=0.001
+            new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=4)
+            print("increase radius, r=", R ," new area=", new_area,"max area=", max_area, "\n")
         end
     end
-    m_cell[parameter_dict["current_radius"]] = round(R, digits=3)
+    m_cell[parameter_dict["current_radius"]] = round(R, digits=4)
     m_cell[parameter_dict["centre_1_position_x"]] += (amount_to_deform/2)*cos(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_1_position_y"]] += (amount_to_deform/2)*sin(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_2_position_x"]] += (amount_to_deform/2)*cos(m_cell[parameter_dict["current_orientation"]])
@@ -125,8 +128,8 @@ function replace_m_cell_with_two_i_cells(m_cell::Array{Float64, 1}, maintained_p
     new_i_cell_2_y_position = m_cell[parameter_dict["centre_2_position_y"]]
     new_i_cell_1::Array{Float64, 1} = create_i_cell(new_i_cell_1_x_position,new_i_cell_1_y_position,R,current_orientation)
     new_i_cell_2::Array{Float64, 1} = create_i_cell(new_i_cell_2_x_position,new_i_cell_2_y_position,R,current_orientation)
-    created_cells::Array{Float64} = hcat(new_i_cell_1;new_i_cell_2)
-    print("new i cells size", size(new_i_cells))
+    new_i_cells::Array{Float64} = hcat(new_i_cell_1 , new_i_cell_2)
+    #print("new i cells size", size(new_i_cells))
     return new_i_cells
 end
 ############FUNCTION TO SET UP CLUSTER########
@@ -143,7 +146,7 @@ function make_a_move(cluster::Array{Float64}, maintained_parameters::Array{Float
                                     chosen_cell[parameter_dict["centre_1_position_y"]] == chosen_cell[parameter_dict["centre_2_position_y"]])
         #### I CELL PROTOCOL
 
-        if random_number <= 2000/2501
+        if random_number <= 200/2501
             chosen_cell = grow_i_cell(chosen_cell, maintained_parameters)
             #print("grow\n")
         else
@@ -158,27 +161,57 @@ function make_a_move(cluster::Array{Float64}, maintained_parameters::Array{Float
 
     else
         #### M CELL PROTOCOL
-        if random_number <=1500/2506
+        if random_number <=2506/2506
             chosen_cell=deform_m_cell(chosen_cell, maintained_parameters)
-        elseif random_number <= 2200/2506
+        elseif random_number <= 1/2506
             chosen_cell=rotate_m_cell(chosen_cell, maintained_parameters)
         else
             chosen_cell=migrate_m_cell(chosen_cell, maintained_parameters)
         end
-        if chosen_cell[parameter_dict["current_deformation"]] > chosen_cell[parameter_dict["current_radius"]]
+        print("current def=",chosen_cell[parameter_dict["current_deformation"]] , "current radius=", chosen_cell[parameter_dict["current_radius"]], "\n" )
+        #if chosen_cell[parameter_dict["current_deformation"]] >= (2*chosen_cell[parameter_dict["current_radius"]])+0.5
+        if chosen_cell[parameter_dict["current_radius"]] <= maintained_parameters[maintained_parameters_dict["R_max"]]/(sqrt(2))
 
-            print("Replace M with 2I")
+            print("Replace M with 2I \n")
             two_i_cells = replace_m_cell_with_two_i_cells(chosen_cell, maintained_parameters)
-            print("size of new cells=", size(two_i_cells), "\n")
-
-            # chosen_cell = two_i_cells[:,1]
-            # other_cell = two_i_cells[:,2]
-            #cluster = vcat(cluster; new_cell)
+            #print("size of new cells=", size(two_i_cells), "\n")
+            chosen_cell = two_i_cells[:,1]
+            other_cell = two_i_cells[:,2]
+            cluster = hcat(cluster, other_cell)
         end
     end
     cluster[:,index_of_cell_to_choose]=chosen_cell
     return cluster
 end
+
+function draw_an_i_cell(i_cell::Array{Float64})
+    x_pos = i_cell[parameter_dict["centre_1_position_x"]]
+    y_pos = i_cell[parameter_dict["centre_1_position_y"]]
+    radius= i_cell[parameter_dict["current_radius"]]
+    circle = pyplt.Circle((x_pos, y_pos), radius, alpha=0.1 , color=:green, lw=0.3)
+    return circle
+end
+    #pyplt.plot(draw_a_circle(x_pos,y_pos,radius_for_draw), seriestype = [:shape,], lw=1, aspect_ratio = 1, linecolor = :black, fillalpha = 0)
+function draw_an_m_cell(m_cell::Array{Float64})
+    x_pos1 = m_cell[parameter_dict["centre_1_position_x"]]
+    y_pos1 = m_cell[parameter_dict["centre_1_position_y"]]
+    x_pos2 = m_cell[parameter_dict["centre_2_position_x"]]
+    y_pos2 = m_cell[parameter_dict["centre_2_position_y"]]
+    radius= m_cell[parameter_dict["current_radius"]]
+    circle1 = pyplt.Circle((x_pos1, y_pos1), radius, alpha = 0.1 , color = :blue, lw=0.3)
+    circle2 = pyplt.Circle((x_pos2, y_pos2), radius, alpha=0.1 , color = :blue, lw=0.3)
+    circles::Array{} = [circle1, circle2]
+    #pyplt.plot(draw_a_circle(x_pos1,y_pos1,radius_for_draw), seriestype = [:shape,], lw=1, aspect_ratio = 1, linecolor = :blue, fillalpha = 0)
+    #pyplt.plot(draw_a_circle(x_pos2,y_pos2,radius_for_draw), seriestype = [:shape,], lw=1, aspect_ratio = 1, linecolor = :blue, fillalpha = 0)
+    return circles
+end
+
+
+ENV["PLOTS_USE_ATOM_PLOTPANE"] = "false"
+using Plots
+using PyPlot
+using PyCall
+@pyimport matplotlib.pyplot as pyplt
 
 
 function main()
@@ -189,26 +222,45 @@ function main()
     cluster = initialise_cluster(starting_cell)
     print(cluster)
     i = 0
-    while i <1000
+    while i <500
+        #print("i=", i, "\n")
         cluster = make_a_move(cluster, maintained_parameters)
         #print(cluster, "\n")
 
         i += 1
     end
-    print(cluster)
+    print(transpose(cluster))
+    print("there are", size(cluster,2), "cells\n")
 
+    #plt = plot( bg = :white, xlim = (0.0, 20.0),  ylim = (-10.0, 10.0), framestyle = :none,
+    #size = (400, 400),  legend = false,)
+    #pyplt.figure(figsize = (5,5))
+    pyplt.clf()
+    ax=pyplt.gca()
+    ax.set_xlim((-10, 10))
+    ax.set_ylim((-10, 10))
+    ax.set_aspect("equal")
+    for i::Int16 in (1:1:size(cluster,2))
+        print("i=", i, "\n")
+        cell_to_draw = cluster[:,i]
+        #radius_for_draw = cell_to_draw[parameter_dict["current_radius"]]
+        if (cell_to_draw[parameter_dict["centre_1_position_x"]] == cell_to_draw[parameter_dict["centre_2_position_x"]]) && (
+                                        cell_to_draw[parameter_dict["centre_1_position_y"]] == cell_to_draw[parameter_dict["centre_2_position_y"]])
+            #I CELL PROTOCOL
+            ax.add_artist(draw_an_i_cell(cell_to_draw))
+        else
+            circles = draw_an_m_cell(cell_to_draw)
+            current_cell = circles[1]
+            ax.add_artist(current_cell)
+            current_cell = circles[2]
+            ax.add_artist(current_cell)
+            #end
+
+        end
+        fig = gcf()
+        display(fig)
+    end
 
 end
-
-    ###number of rows =  size(cluster, 2)
-    # array::Array{Int64} = [1 2 3; 4 5 6]
-    # print(array[2,:])
-    # new_i_cell = create_i_cell(1.0,1.0,4.5, 0.0)
-    # print(new_i_cell)
-    # new_i_cell=migrate_i_cell(new_i_cell, maintained_parameters)
-    # print(new_i_cell)
-
-
-
 
 main()
