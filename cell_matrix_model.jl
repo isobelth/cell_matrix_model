@@ -4,11 +4,11 @@ using PyPlot
 using PyCall
 @pyimport matplotlib.pyplot as pyplt
 using VoronoiDelaunay
-scipy.spatial = pyimport("scipy.spatial")
+sp = pyimport("scipy.spatial")
 
 parameter_dict = Dict("centre_1_position_x" => 1, "centre_1_position_y" => 2,
                       "centre_2_position_x" => 3, "centre_2_position_y" => 4,
-                      "current_radius" => 5, "current_orientation" => 6, "current_deformation" => 7 )
+                      "current_radius" => 5, "current_orientation" => 6, "current_deformation" => 7, "CoM_position_x" => 8, "CoM_position_y" => 9 )
 maintained_parameters_dict = Dict("R_max" => 1, "dR_max" => 2, "dr_max" => 3,
                                   "dtheta_max" => 4, "dd_max" => 5, "initial_deformation_proportion" => 6)
 cluster_parameters_dict = Dict("matrix_stiffness" => 1, "attractor_start_x" => 2, "attractor_start_y" => 3,
@@ -23,7 +23,7 @@ function create_cluster_parameters(matrix_stiffness::Float64, attractor_start_x:
 end
 #############FUNCTIONS FOR I CELLS###################
 function create_i_cell(centre_1_position_x::Float64, centre_1_position_y::Float64, current_radius::Float64, current_orientation::Float64)
-    i_cell::Array{Float64, 1} = [centre_1_position_x, centre_1_position_y, centre_1_position_x, centre_1_position_y, current_radius, current_orientation, 0.0]
+    i_cell::Array{Float64, 1} = [centre_1_position_x, centre_1_position_y, centre_1_position_x, centre_1_position_y, current_radius, current_orientation, 0.0, centre_1_position_x, centre_1_position_y]
     return i_cell
 end
 function migrate_i_cell(i_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
@@ -33,6 +33,8 @@ function migrate_i_cell(i_cell::Array{Float64, 1}, maintained_parameters::Array{
     i_cell[parameter_dict["centre_1_position_y"]] += amount_to_move*sin(direction_to_move)
     i_cell[parameter_dict["centre_2_position_x"]] = i_cell[parameter_dict["centre_1_position_x"]]
     i_cell[parameter_dict["centre_2_position_y"]] = i_cell[parameter_dict["centre_1_position_y"]]
+    i_cell[parameter_dict["CoM_position_x"]] = i_cell[parameter_dict["centre_1_position_x"]]
+    i_cell[parameter_dict["CoM_position_y"]] = i_cell[parameter_dict["centre_1_position_y"]]
     return i_cell
 end
 function grow_i_cell(i_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
@@ -51,7 +53,7 @@ function draw_an_i_cell(i_cell::Array{Float64})
 end
 ###################FUNCTIONS FOR M CELLS#############
 function create_m_cell(centre_1_position_x::Float64, centre_1_position_y::Float64, centre_2_position_x::Float64, centre_2_position_y::Float64, current_radius::Float64, current_orientation::Float64, current_deformation::Float64)
-    m_cell::Array{Float64, 1} = [centre_1_position_x, centre_1_position_y, centre_2_position_x, centre_2_position_y, current_radius, current_orientation, current_deformation]
+    m_cell::Array{Float64, 1} = [centre_1_position_x, centre_1_position_y, centre_2_position_x, centre_2_position_y, current_radius, current_orientation, current_deformation, 0.5*(centre_1_position_x+centre_2_position_x),0.5*(centre_1_position_y+centre_2_position_y)]
     return m_cell
 end
 function migrate_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
@@ -61,6 +63,8 @@ function migrate_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{
     m_cell[parameter_dict["centre_1_position_y"]] += amount_to_move*sin(direction_to_move)
     m_cell[parameter_dict["centre_2_position_x"]] += amount_to_move*cos(direction_to_move)
     m_cell[parameter_dict["centre_2_position_y"]] += amount_to_move*sin(direction_to_move)
+    m_cell[parameter_dict["CoM_position_x"]]=0.5*(m_cell[parameter_dict["centre_1_position_x"]]+m_cell[parameter_dict["centre_2_position_x"]])
+    m_cell[parameter_dict["CoM_position_y"]]=0.5*(m_cell[parameter_dict["centre_1_position_y"]]+m_cell[parameter_dict["centre_2_position_y"]])
     return m_cell
 end
 function deform_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
@@ -78,13 +82,10 @@ function deform_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{F
     while (abs(new_area-max_area))>0.5
         if new_area - max_area >0.5
             R-=0.001
-
             new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=4)
-            #print("decrease radius, r=", R," new area=", new_area, "max area=", max_area, "\n")
         else
             R+=0.001
             new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=4)
-            #print("increase radius, r=", R ," new area=", new_area,"max area=", max_area, "\n")
         end
     end
     m_cell[parameter_dict["current_radius"]] = round(R, digits=4)
@@ -92,6 +93,8 @@ function deform_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{F
     m_cell[parameter_dict["centre_1_position_y"]] += (amount_to_deform/2)*sin(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_2_position_x"]] += (amount_to_deform/2)*cos(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_2_position_y"]] += (amount_to_deform/2)*sin(m_cell[parameter_dict["current_orientation"]])
+    m_cell[parameter_dict["CoM_position_x"]]=0.5*(m_cell[parameter_dict["centre_1_position_x"]]+m_cell[parameter_dict["centre_2_position_x"]])
+    m_cell[parameter_dict["CoM_position_y"]]=0.5*(m_cell[parameter_dict["centre_1_position_y"]]+m_cell[parameter_dict["centre_2_position_y"]])
     return m_cell
 end
 function rotate_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
@@ -102,6 +105,8 @@ function rotate_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{F
     m_cell[parameter_dict["centre_1_position_y"]] += m_cell[parameter_dict["current_deformation"]]*0.5*sin(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_2_position_x"]] -= m_cell[parameter_dict["current_deformation"]]*0.5*cos(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_2_position_y"]] -= m_cell[parameter_dict["current_deformation"]]*0.5*sin(m_cell[parameter_dict["current_orientation"]])
+    m_cell[parameter_dict["CoM_position_x"]]=0.5*(m_cell[parameter_dict["centre_1_position_x"]]+m_cell[parameter_dict["centre_2_position_x"]])
+    m_cell[parameter_dict["CoM_position_y"]]=0.5*(m_cell[parameter_dict["centre_1_position_y"]]+m_cell[parameter_dict["centre_2_position_y"]])
     return m_cell
 end
 function draw_an_m_cell(m_cell::Array{Float64})
@@ -142,6 +147,8 @@ function replace_i_cell_with_m_cell(i_cell::Array{Float64, 1}, maintained_parame
     new_m_cell[parameter_dict["centre_1_position_y"]] = i_cell[parameter_dict["centre_1_position_y"]] + (d)*0.5*sin(current_orientation)
     new_m_cell[parameter_dict["centre_2_position_x"]] = i_cell[parameter_dict["centre_1_position_x"]] - (d)*0.5*cos(current_orientation)
     new_m_cell[parameter_dict["centre_2_position_y"]] = i_cell[parameter_dict["centre_1_position_y"]] - (d)*0.5*sin(current_orientation)
+    new_m_cell[parameter_dict["CoM_position_x"]]=(0.5*new_m_cell[parameter_dict["centre_1_position_x"]]+new_m_cell[parameter_dict["centre_2_position_x"]])
+    new_m_cell[parameter_dict["CoM_position_y"]]=(0.5*new_m_cell[parameter_dict["centre_1_position_y"]]+new_m_cell[parameter_dict["centre_2_position_y"]])
 
     return new_m_cell
 end
@@ -171,18 +178,26 @@ function find_neighbours(pindex, triang)
                 for j::Int64 in (1:1:3)
                         for k::Int64 in (1:1:3)
                                 if triang.vertices[i,j] == pindex
+                        #if triang.vertices[i,j] != pindex
                                         if j != k
-                                                neighbours=vcat(neighbours, triang.vertices[i,k])
+                                                neighbours=vcat(neighbours, triang.vertices[i,k] + 1)
                                         end
                                 end
                         end
                 end
-            end
-        for l::Int64 in (1:1:size(neighbours,1))
-                neighbours[l] += 1
         end
-        print("The neighbours are", Set(neighbours), "\n\n")
-        return Set(neighbours)
+        neighbours = unique(neighbours)
+        return neighbours
+end
+function make_a_dictionary_of_neighbours(points::Array{Float64}, triang)
+        neighbours_dictionary = Dict()
+        for i::Int64 in (1:1:size(points,1))
+                #key_for_dict = string(i)
+                key_for_dict = i
+                element_for_dict = find_neighbours(i,triang)
+                neighbours_dictionary[key_for_dict] = element_for_dict
+        end
+        return neighbours_dictionary
 end
 function julia_delaunay_vertices(triang)
     triang_vertices = triang.vertices
@@ -193,7 +208,6 @@ function julia_delaunay_vertices(triang)
     end
     return triang_vertices
 end
-
 function make_a_move(cluster::Array{Float64}, maintained_parameters::Array{Float64})
     index_of_cell_to_choose = rand(1: size(cluster,2)) # includes lower and upper number
     chosen_cell = cluster[:,index_of_cell_to_choose]
@@ -240,35 +254,33 @@ function make_a_move(cluster::Array{Float64}, maintained_parameters::Array{Float
     cluster[:,index_of_cell_to_choose]=chosen_cell
     return cluster
 end
-function calculate_the_morse_potential(cluster::Array{Float64}, maintained_parameters::Array{Float64}, triang, De::Float64, a::Float64)
-    total_potential_contributed_by_cell = 0
-    index_of_first_cell = 1
-    first_cell = cluster[:,index_of_first_cell]
-    #neighbour_indices = find_neighbours(1,triang)
-    print(neighbour_indices)
-    if (first_cell[parameter_dict["centre_1_position_x"]] == first_cell[parameter_dict["centre_2_position_x"]]) && (
-                                    first_cell[parameter_dict["centre_1_position_y"]] == first_cell[parameter_dict["centre_2_position_y"]])
-        for i::Int16 in (1:1:size(cluster,2))
-            print("i=", i, "\n")
-            other_cell = cluster[:,i]
-            if (other_cell[parameter_dict["centre_1_position_x"]] == other_cell[parameter_dict["centre_2_position_x"]]) && (
-                                            other_cell[parameter_dict["centre_1_position_y"]] == other_cell[parameter_dict["centre_2_position_y"]])
-    #I cell protocol
-                equilibrium_radius::Float64 = first_cell[parameter_dict["current_radius"]] + other_cell[parameter_dict["current_radius"]]
-                dx::Float64 = first_cell[parameter_dict["centre_1_position_x"]] - other_cell[parameter_dict["centre_2_position_x"]]
-                dy::Float64 = first_cell[parameter_dict["centre_1_position_y"]] - other_cell[parameter_dict["centre_2_position_y"]]
+function morse_potential(cluster::Array{Float64}, neighbour_dict::Dict, De::Float64, a::Float64)
+    total_potential::Float64 = 0
+    for i::Int64 in (1:1:size(cluster,2))
+        first_cell = cluster[:, i]
+        neighbours_list = neighbour_dict[i]
+        total_potential_contributed_by_cell = 0
+        for j::Int64 in (1:1:size(neighbours_list,1))
+            if i < j
+                second_cell = cluster[:, j]
+                equilibrium_radius::Float64 = first_cell[parameter_dict["current_radius"]] + second_cell[parameter_dict["current_radius"]]
+                dx::Float64 = first_cell[parameter_dict["CoM_position_x"]] - second_cell[parameter_dict["CoM_position_x"]]
+                dy::Float64 = first_cell[parameter_dict["CoM_position_y"]] - second_cell[parameter_dict["CoM_position_y"]]
                 r12::Float64 = sqrt((dx*dx)+(dy*dy))
 
                 exp_factor::Float64 = exp(-a*(r12-equilibrium_radius))
-                potential::Float64 = De*(1-(exp_factor*exp_factor))*(1-(exp_factor*exp_factor))
-                total_potential_contributed_by_cell +=potential
+                potential_for_pair::Float64 = De*(1-(exp_factor*exp_factor))*(1-(exp_factor*exp_factor))
+                print("i=", i, "j=", j, "potential for pair=", potential_for_pair, "\n")
+                total_potential_contributed_by_cell += potential_for_pair
+                print("running total for cell ", i, "=", total_potential_contributed_by_cell, "\n")
             end
         end
+        print("i=", i, "total potential from cell =", total_potential_contributed_by_cell, "\n")
+        total_potential += total_potential_contributed_by_cell
     end
-    return total_force_contributed_by_one_cell
+    print("total potential from cluster =", total_potential, "\n")
+    return total_potential
 end
-
-
 function main()
     maintained_parameters = create_maintained_parameters(5.0, 0.05, 0.05, 0.000001, 0.05, 0.005)
     cluster_parameters = create_cluster_parameters(5.0,1.0,1.0,2.0,2.0,5.0)
@@ -288,7 +300,7 @@ function main()
     ax.set_aspect("equal")
 
     for i::Int16 in (1:1:size(cluster,2))
-        print("i=", i, "\n")
+        #print("i=", i, "\n")
         cell_to_draw = cluster[:,i]
         if (cell_to_draw[parameter_dict["centre_1_position_x"]] == cell_to_draw[parameter_dict["centre_2_position_x"]]) && (
                                         cell_to_draw[parameter_dict["centre_1_position_y"]] == cell_to_draw[parameter_dict["centre_2_position_y"]])
@@ -303,30 +315,18 @@ function main()
             #end
 
         end
-        #fig = gcf()
-        #display(fig)
     end
-
-    x_coords::Array{Float64} = vcat(cluster[1,:], cluster[3,:])
-    y_coords::Array{Float64}=vcat(cluster[2,:], cluster[4,:])
-
-    print("xcoords=", x_coords)
-    print("ycoord", y_coords)
-    points::Array{Float64}=(hcat(x_coords, y_coords))
+    x_coords::Array{Float64} = cluster[parameter_dict["CoM_position_x"], :] #only CoM coords
+    y_coords::Array{Float64} = cluster[parameter_dict["CoM_position_y"], :] #only CoM coords
+    points = hcat(x_coords, y_coords)
     dela=scipy.spatial.Delaunay
     triang = dela(points)
-        #print(triang.points, "\n")
-    print(triang.vertices, "\n")
-    print(julia_delaunay_vertices(triang), "\n")
-    print(find_neighbours(2,triang))
-        #print(triang.neighbors[4])
     plt.triplot(points[:,1], points[:,2], triang.simplices, color = :blue)
     plt.plot(points[:,1], points[:,2], lw= 0, marker="o", linestyle="")
     fig = gcf()
     display(fig)
-    calculate_the_morse_force(cluster, maintained_parameters, triang, 1.0, 1.0)
 
-
+    neighbour_dict = make_a_dictionary_of_neighbours(points, triang)
+    print("morse pot is", morse_potential(cluster, neighbour_dict, 1.0, 1.0))
 end
-
 main()
