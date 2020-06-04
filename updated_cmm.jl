@@ -68,27 +68,27 @@ function migrate_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{
     return m_cell
 end
 function deform_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
-    amount_to_deform = maintained_parameters[maintained_parameters_dict["dd_max"]]*rand()
-    d::Float64 =  m_cell[parameter_dict["current_deformation"]] + amount_to_deform
-    print("Deforming by", amount_to_deform, "new deformation =",  m_cell[parameter_dict["current_deformation"]], "\n")
-    R::Float64= m_cell[parameter_dict["current_radius"]]
-    #x::Float64=d/(2*R)
+    amount_to_deform::Float64 = maintained_parameters[maintained_parameters_dict["dd_max"]]*rand()
+    m_cell[parameter_dict["current_deformation"]] += amount_to_deform
+    d::Float64=m_cell[parameter_dict["current_deformation"]]
+    R::Float64=m_cell[parameter_dict["current_radius"]]
+    x::Float64=d/(2*R)
     max_area::Float64 = round(pi * maintained_parameters[maintained_parameters_dict["R_max"]] * maintained_parameters[maintained_parameters_dict["R_max"]], digits=4)
-    if (d/(2*R))<=1
-        new_area::Float64 = round(2*R*R * (pi - acos(d/(2*R))+ (0.5*d* sqrt(4*R*R-d*d))), digits=5)
+    new_area::Float64 = 0.0
+    if x<=1
+        new_area= round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=3)
     else
-        new_area::Inf16
+        new_area = 1000000.0
     end
     while (abs(new_area-max_area))>0.5
         if new_area - max_area >0.5
             R-=0.01
-            new_area = round(2*R*R * (pi - acos(d/(2*R))+ (0.5*d* sqrt(4*R*R-d*d))), digits=5)
+            new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=5)
         else
             R+=0.01
-            new_area = round(2*R*R * (pi - acos(d/(2*R))+ (0.5*d* sqrt(4*R*R-d*d))), digits=5)
+            new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)), digits=5)
         end
     end
-    m_cell[parameter_dict["current_deformation"]] = d
     m_cell[parameter_dict["current_radius"]] = round(R, digits=4)
     m_cell[parameter_dict["centre_1_position_x"]] += (amount_to_deform/2)*cos(m_cell[parameter_dict["current_orientation"]])
     m_cell[parameter_dict["centre_1_position_y"]] += (amount_to_deform/2)*sin(m_cell[parameter_dict["current_orientation"]])
@@ -110,6 +110,7 @@ function rotate_m_cell(m_cell::Array{Float64, 1}, maintained_parameters::Array{F
     m_cell[parameter_dict["CoM_position_y"]]=0.5*(m_cell[parameter_dict["centre_1_position_y"]]+m_cell[parameter_dict["centre_2_position_y"]])
     return m_cell
 end
+
 function draw_an_m_cell(m_cell::Array{Float64})
     x_pos1 = m_cell[parameter_dict["centre_1_position_x"]]
     y_pos1 = m_cell[parameter_dict["centre_1_position_y"]]
@@ -133,10 +134,10 @@ function replace_i_cell_with_m_cell(i_cell::Array{Float64, 1}, maintained_parame
     while (abs(new_area-max_area))>0.5
         if new_area - max_area >0.5
             R-=0.01
-            new_area = 2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d))
+            new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)),digits=5)
         else
             R+=0.01
-            new_area = 2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d))
+            new_area = round(2*R*R * (pi - acos(d/(2*R))+ 0.5*d* sqrt(4*R*R-d*d)),digits=5)
         end
     end
     new_m_cell[parameter_dict["current_radius"]] = round(R, digits=3)
@@ -151,6 +152,7 @@ function replace_i_cell_with_m_cell(i_cell::Array{Float64, 1}, maintained_parame
 
     return new_m_cell
 end
+
 function replace_m_cell_with_two_i_cells(m_cell::Array{Float64, 1}, maintained_parameters::Array{Float64, 1})
     r = m_cell[parameter_dict["current_radius"]]
     current_orientation = m_cell[parameter_dict["current_orientation"]]
@@ -203,7 +205,7 @@ function make_a_move(cluster::Array{Float64}, maintained_parameters::Array{Float
     if (chosen_cell[parameter_dict["centre_1_position_x"]] == chosen_cell[parameter_dict["centre_2_position_x"]]) && (
                                     chosen_cell[parameter_dict["centre_1_position_y"]] == chosen_cell[parameter_dict["centre_2_position_y"]])
         #### I CELL PROTOCOL
-        if random_number <= 1/2501
+        if random_number <= 5/2501
             chosen_cell = grow_i_cell(chosen_cell, maintained_parameters)
         else
             chosen_cell = migrate_i_cell(chosen_cell, maintained_parameters)
@@ -215,18 +217,19 @@ function make_a_move(cluster::Array{Float64}, maintained_parameters::Array{Float
         #cluster[:,index_of_cell_to_choose]=chosen_cell
     else
         #### M CELL PROTOCOL
-        if random_number <=1/2506
+        if random_number <=5/2506
             print("cell index is", index_of_cell_to_choose, "\n")
             chosen_cell=deform_m_cell(chosen_cell, maintained_parameters)
 
-        elseif random_number <= 5/2506
+        elseif random_number <= 25/2506
             chosen_cell=rotate_m_cell(chosen_cell, maintained_parameters)
         else
             chosen_cell=migrate_m_cell(chosen_cell, maintained_parameters)
         end
-        Rmrt::Float64 = maintained_parameters[maintained_parameters_dict["R_max"]]/sqrt(2)
+        #Rmrt::Float64 = maintained_parameters[maintained_parameters_dict["R_max"]]/sqrt(2)
         #print("current radius = ", chosen_cell[parameter_dict["current_radius"]], "Rmrt=", Rmrt, "\n")
-        if chosen_cell[parameter_dict["current_radius"]] <=Rmrt
+        #if chosen_cell[parameter_dict["current_radius"]] <= maintained_parameters[maintained_parameters_dict["R_max"]]/(sqrt(2))
+        if chosen_cell[parameter_dict["current_radius"]] <= maintained_parameters[maintained_parameters_dict["R_max"]]/(sqrt(2))
 
             print("Replace M with 2I \n")
             two_i_cells = replace_m_cell_with_two_i_cells(chosen_cell, maintained_parameters)
@@ -296,7 +299,7 @@ function main()
     count_accept_new::Int64 = 0
     count_keep_old::Int64 = 0
     #while size(cluster, 2) >= 3 && size(cluster, 2) < 4
-    while i < 1500
+    while i < 1000
         number_of_cells = size(cluster, 2)
         cluster_after_making_change, new_number_of_cells = make_a_move(cluster, maintained_parameters, number_of_cells)
         print("There were", number_of_cells, "cells and now there are", new_number_of_cells, "cells\n")
@@ -304,14 +307,13 @@ function main()
             x_coords = cluster_after_making_change[parameter_dict["CoM_position_x"], :] #only CoM coords
             y_coords = cluster_after_making_change[parameter_dict["CoM_position_y"], :] #only CoM coords
             points = hcat(x_coords, y_coords)
-            #dela = scipy.spatial.Delaunay
             triang = dela(points)
             neighbour_dict = make_a_dictionary_of_neighbours(points, triang)
             print("The neighbour dict is", neighbour_dict, "\n")
         end
-        energy_after_making_change::Float64 = morse_potential(cluster_after_making_change, neighbour_dict, 1.0, 1.0)
+        energy_after_making_change::Float64 = morse_potential(cluster_after_making_change, neighbour_dict, 5.0, 1.0)
         change_in_energy::Float64 = energy_after_making_change - energy_before_making_change
-        x::Float64 = change_in_energy/ (0.0001)
+        x::Float64 = change_in_energy/ (1)
         random_number = rand()
         exp_delta_E =  (1 - (x) + (0.5*x*x))
         print("i=", i, "change in energy =", change_in_energy, "random number = ", random_number, "exp-deltaE=", exp_delta_E, "\n")
@@ -320,7 +322,9 @@ function main()
                 #############accept new one
             cluster = cluster_after_making_change
             energy_before_making_change = energy_after_making_change
-            count_accept_new +=1
+            if change_in_energy >0
+                count_accept_new +=1
+            end
         else
             count_keep_old += 1
         end
